@@ -10,7 +10,7 @@
   let rec = null, afterSpeak = null, speakWatch = null, speakGen = 0;
   let recDenied = 0, editing = null;
   let icsUrl = null, currentIcs = '', icsVer = 0;
-  let tapped = false, destAt = 0, awayMode = '', picking = false;
+  let destAt = 0, awayMode = '', picking = false;
   const ICS_PATH = 'ics/yotei.ics';
 
   const ua = navigator.userAgent;
@@ -132,6 +132,7 @@
   let recEnded = Promise.resolve();
   let diag = '';
   const AFTER_TTS_MS = 400;                 // 読み上げが終わってから聞き始めるまで
+  const LISTEN_MAX_MS = 30000;              // 黙っていても、この間は聞き続ける
   const QUIET_MS = 1500;                   // 話し終わりと決めるまでの時間（iPhone 任せだと、まばらになる）
 
   let captureRetries = 0;
@@ -156,7 +157,7 @@
     let markEnd;
     recEnded = new Promise(res => { markEnd = res; });
     let interim = '', finished = false, quiet = null, sawAudio = false, sawSpeech = false, lastErr = '';
-    const hard = setTimeout(() => finish(interim ? [interim] : []), 12000);
+    const hard = setTimeout(() => { if (!lastErr) lastErr = '時間切れ'; finish(interim ? [interim] : []); }, LISTEN_MAX_MS);
     function finish(list) {
       if (finished) return;
       finished = true;
@@ -164,7 +165,7 @@
       if (my !== gen) return;
       rec = null;
       diag = 'マイク' + (sawAudio ? '○' : '×') + ' 声' + (sawSpeech ? '○' : '×') + (lastErr ? ' ' + lastErr : '');
-      try { r.abort(); } catch (e) { /* すでに止まっている */ }
+      try { if (list.length) r.abort(); else r.stop(); } catch (e) { /* すでに止まっている */ }
       if (list.length) $('heard').textContent = '「' + list[0].trim() + '」';
       Promise.race([recEnded, delay(400)]).then(() => { if (my === gen) onHeard(list); });
     }
@@ -230,10 +231,8 @@
   function didNotHear() {
     retries++;
     $('heard').textContent = '（' + diag + '）';
-    if (retries > 2) { waitForTap('聞き取れませんでした。「もう一度聞く」を押してください。'); return; }
-    // 声で案内すると、また音の出し入れが切り替わって聞き取りにくくなるので、文字だけにして間を長くする
-    setPrompt('聞き取れませんでした。もう一度どうぞ。');
-    listen(retries * 600);
+    // iPhone は、黙ったまま終わったあとに自動で聞き直すと、声が入らなくなる。押してもらってから聞く
+    waitForTap('聞き取れませんでした。「もう一度聞く」を押してください。');
   }
 
   function waitForTap(text) {
@@ -371,14 +370,12 @@
 
   // ---------- ボタン ----------
   $('bStart').onclick = () => {
-    tapped = true;
     // iPhone は、タップの中で一度話さないと、そのあと音が出ない
     if (ttsOk()) { try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) { /* */ } }
     recDenied = 0;
     begin();
   };
   $('bMic').onclick = () => {
-    tapped = true;
     stopSpeaking();
     recDenied = 0;
     retries = 0;
@@ -392,7 +389,6 @@
     ask(step);
   };
   function fixItem(s) {
-    tapped = true;
     stopSpeaking();
     recDenied = 0;
     picking = false;
@@ -410,12 +406,10 @@
     setPrompt('よければ、登録先のボタンを押してください。');
   };
   $('bNew').onclick = () => {
-    tapped = true;
     stopSpeaking();
     stopListening();
     closeTyper();
     recDenied = 0;
-    tapped = true;
     begin();
   };
   $('bGoogle').addEventListener('click', () => { destAt = Date.now(); });
@@ -451,10 +445,6 @@
     setMic('待っています');
     setPrompt(text);
   }
-  function startFresh() {
-    if (tapped) { closeTyper(); recDenied = 0; begin(); return; }
-    cleanScreen('「開始」を押すと、声で聞いていきます。');
-  }
   function afterDest() {
     cleanScreen('次の予定を入れるときは、「開始」を押してください。');
   }
@@ -472,9 +462,8 @@
       if (since >= DEST_SHORT_MS) afterDest();
       return;
     }
-    if (mode !== 'fresh') return;
-    // iPhone は戻った直後だと音が出なかったり、マイクを取れなかったりするので、少し待つ
-    setTimeout(() => { if (!document.hidden) startFresh(); }, 1000);
+    // iPhone は押さずに始めるとマイクが不安定なので、勝手に話さず「開始」を待つ
+    if (mode === 'fresh') cleanScreen('「開始」を押すと、声で聞いていきます。');
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) goneAway(); else cameBack(); });
   // カレンダーの追加の画面は、ページが裏に回らずに閉じることがある
