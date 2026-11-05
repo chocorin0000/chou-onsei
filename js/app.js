@@ -151,13 +151,14 @@
     try { r = new SR(); } catch (e) { openTyper(step, true); return; }
     rec = r;
     r.lang = 'ja-JP';
-    r.continuous = false;
+    r.continuous = true;   // 話し終わりは iPhone に任せず、QUIET_MS の無音で決める
     r.interimResults = true;
     r.maxAlternatives = 5;
     let markEnd;
     recEnded = new Promise(res => { markEnd = res; });
-    let interim = '', finished = false, quiet = null, sawAudio = false, sawSpeech = false, lastErr = '';
-    const hard = setTimeout(() => { if (!lastErr) lastErr = '時間切れ'; finish(interim ? [interim] : []); }, LISTEN_MAX_MS);
+    let interim = '', alts = null, finished = false, quiet = null, sawAudio = false, sawSpeech = false, lastErr = '';
+    const heardList = () => (!interim ? [] : alts && alts.length ? alts : [interim]);
+    const hard = setTimeout(() => { if (!lastErr) lastErr = '時間切れ'; finish(heardList()); }, LISTEN_MAX_MS);
     function finish(list) {
       if (finished) return;
       finished = true;
@@ -175,21 +176,19 @@
     r.onresult = e => {
       if (my !== gen || finished) return;
       let text = '';
-      for (let i = 0; i < e.results.length; i++) {
-        const x = e.results[i];
-        if (x.isFinal) {
-          const list = [];
-          for (let k = 0; k < x.length; k++) if (x[k].transcript) list.push(x[k].transcript);
-          finish(list);
-          return;
-        }
-        text += x[0].transcript;
+      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+      // ひと続きのときは、日時を読むために、ほかの候補も取っておく
+      alts = null;
+      if (e.results.length === 1) {
+        alts = [];
+        for (let k = 0; k < e.results[0].length; k++) if (e.results[0][k].transcript) alts.push(e.results[0][k].transcript);
       }
       interim = text;
       sawSpeech = true;
       $('heard').textContent = text;
+      clearTimeout(hard);  // 話している間は、時間切れにしない
       clearTimeout(quiet);
-      quiet = setTimeout(() => finish(interim ? [interim] : []), QUIET_MS);
+      quiet = setTimeout(() => finish(heardList()), QUIET_MS);
     };
     r.onerror = e => {
       lastErr = e.error || '';
@@ -223,7 +222,7 @@
     r.onend = () => {
       markEnd();
       if (my !== gen || finished) return;
-      finish(interim ? [interim] : []);
+      finish(heardList());
     };
     try { r.start(); } catch (e) { markEnd(); rec = null; waitForTap('「もう一度聞く」を押してください。'); }
   }
