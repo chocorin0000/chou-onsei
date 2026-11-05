@@ -125,10 +125,23 @@
     if (rec) { try { rec.abort(); } catch (e) { /* すでに止まっている */ } rec = null; }
   }
 
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  let recEnded = Promise.resolve();
+  let diag = '';
+  const AFTER_TTS_MS = isIOS ? 700 : 200;  // iPhone は読み上げの直後にマイクを開くと、聞こえないことがある
+  const QUIET_MS = 1500;                   // 話し終わりと決めるまでの時間（iPhone 任せだと、まばらになる）
+
   function listen() {
     stopListening();
     if (!SR || recDenied >= 2) { openTyper(step, true); return; }
     const my = gen;
+    $('heard').textContent = '';
+    setMic('準備しています');
+    // 前の聞き取りが完全に終わってから次を始める
+    Promise.race([recEnded, delay(1000)]).then(() => delay(AFTER_TTS_MS)).then(() => { if (my === gen) startRec(my); });
+  }
+
+  function startRec(my) {
     let r;
     try { r = new SR(); } catch (e) { openTyper(step, true); return; }
     rec = r;
@@ -136,37 +149,45 @@
     r.continuous = false;
     r.interimResults = true;
     r.maxAlternatives = 5;
-    let interim = '', finished = false, quiet = null;
-    const hard = setTimeout(() => { try { r.stop(); } catch (e) { /* */ } }, 15000);
-    const finish = list => {
-      if (finished || my !== gen) return;
+    let markEnd;
+    recEnded = new Promise(res => { markEnd = res; });
+    let interim = '', finished = false, quiet = null, sawAudio = false, sawSpeech = false, lastErr = '';
+    const hard = setTimeout(() => finish(interim ? [interim] : []), 12000);
+    function finish(list) {
+      if (finished) return;
       finished = true;
       clearTimeout(hard); clearTimeout(quiet);
-      rec = null;
-      onHeard(list);
-    };
-    r.onstart = () => { if (my === gen) setMic('聞いています。どうぞ', 'listen'); };
-    r.onresult = e => {
       if (my !== gen) return;
+      rec = null;
+      diag = 'マイク' + (sawAudio ? '○' : '×') + ' 声' + (sawSpeech ? '○' : '×') + (lastErr ? ' ' + lastErr : '');
+      try { r.abort(); } catch (e) { /* すでに止まっている */ }
+      if (list.length) $('heard').textContent = '「' + list[0].trim() + '」';
+      Promise.race([recEnded, delay(400)]).then(() => { if (my === gen) onHeard(list); });
+    }
+    r.onstart = () => { if (my === gen) setMic('聞いています。どうぞ', 'listen'); };
+    r.onaudiostart = () => { sawAudio = true; };
+    r.onspeechstart = () => { sawSpeech = true; };
+    r.onresult = e => {
+      if (my !== gen || finished) return;
       let text = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let i = 0; i < e.results.length; i++) {
         const x = e.results[i];
         if (x.isFinal) {
           const list = [];
           for (let k = 0; k < x.length; k++) if (x[k].transcript) list.push(x[k].transcript);
           finish(list);
-          try { r.stop(); } catch (er) { /* */ }
           return;
         }
         text += x[0].transcript;
       }
       interim = text;
+      sawSpeech = true;
       $('heard').textContent = text;
-      // 話し終わっても終わりの合図を出さない機種がある
       clearTimeout(quiet);
-      quiet = setTimeout(() => { try { r.stop(); } catch (er) { /* */ } }, 2500);
+      quiet = setTimeout(() => finish(interim ? [interim] : []), QUIET_MS);
     };
     r.onerror = e => {
+      lastErr = e.error || '';
       if (my !== gen || finished) return;
       if (e.error === 'no-speech' || e.error === 'aborted') return; // onend でまとめて扱う
       finished = true;
@@ -179,20 +200,20 @@
       } else if (e.error === 'network') {
         waitForTap('音声認識につながりません。インターネットを確かめて、「もう一度聞く」を押してください。');
       } else {
-        waitForTap('音声認識でエラーが出ました。「もう一度聞く」を押してください。');
+        waitForTap('音声認識でエラーが出ました（' + e.error + '）。「もう一度聞く」を押してください。');
       }
     };
     r.onend = () => {
+      markEnd();
       if (my !== gen || finished) return;
-      if (interim) finish([interim]); else finish([]);
+      finish(interim ? [interim] : []);
     };
-    $('heard').textContent = '';
-    setMic('準備しています');
-    try { r.start(); } catch (e) { rec = null; waitForTap('もう一度聞くを押してください。'); }
+    try { r.start(); } catch (e) { markEnd(); rec = null; waitForTap('「もう一度聞く」を押してください。'); }
   }
 
   function didNotHear() {
     retries++;
+    $('heard').textContent = '（' + diag + '）';
     if (retries > 2) { waitForTap('聞き取れませんでした。「もう一度聞く」を押してください。'); return; }
     say('聞き取れませんでした。もう一度お願いします。', listen);
   }
@@ -344,7 +365,7 @@
       else { returnToReady = false; ask(Step.TITLE); }
       return;
     }
-    listen();
+    ask(step);
   };
   $('bNew').onclick = () => {
     stopSpeaking();
