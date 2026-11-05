@@ -9,7 +9,8 @@
   let retries = 0, returnToReady = false, gen = 0;
   let rec = null, afterSpeak = null, speakWatch = null, speakGen = 0;
   let recDenied = 0, editing = null;
-  let icsUrl = null;
+  let icsUrl = null, currentIcs = '', icsVer = 0;
+  const ICS_PATH = 'ics/yotei.ics';
 
   const ua = navigator.userAgent;
   const isIPhone = /iPhone|iPod/.test(ua);
@@ -35,13 +36,47 @@
   function updateLinks() {
     const ics = DateParser.buildIcs(title, desc, date);
     $('bIcs').textContent = deviceName + ' のカレンダーへ';
-    $('bIcs').href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-    if (isIOS) $('bIcs').removeAttribute('download'); else $('bIcs').setAttribute('download', 'yotei.ics');
     if (icsUrl) URL.revokeObjectURL(icsUrl);
     icsUrl = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
     $('fileLink').href = icsUrl;
+    currentIcs = ics;
+    if (isIOS) {
+      // iPhone は data: や blob: を開かない。sw.js が普通のファイルのように渡す（中身はスマホの外に出ない）
+      $('bIcs').removeAttribute('download');
+      $('bIcs').href = ICS_PATH + '?v=' + (++icsVer);
+    } else {
+      $('bIcs').setAttribute('download', 'yotei.ics');
+      $('bIcs').href = icsUrl;
+    }
     $('bGoogle').href = DateParser.googleUrl(title, desc, date);
   }
+
+  // 予定のファイルを sw.js から渡せる状態にする。渡せるようになったら true
+  async function prepareIcs() {
+    if (!('serviceWorker' in navigator) || !('caches' in window)) return false;
+    const c = await caches.open('onsei-ics');
+    await c.put(ICS_PATH, new Response(currentIcs, { headers: { 'Content-Type': 'text/calendar; charset=utf-8' } }));
+    for (let i = 0; i < 12; i++) {
+      try {
+        const res = await fetch($('bIcs').href, { cache: 'no-store' });
+        if (res.ok && (res.headers.get('Content-Type') || '').includes('text/calendar')) return true;
+      } catch (e) { /* もう一度 */ }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    return false;
+  }
+
+  $('bIcs').addEventListener('click', async e => {
+    if (!isIOS) return;
+    e.preventDefault();
+    stopSpeaking();
+    setMic('予定のファイルを開いています');
+    let ok = false;
+    try { ok = await prepareIcs(); } catch (er) { ok = false; }
+    setMic('待っています');
+    if (ok) location.href = $('bIcs').href;
+    else setPrompt('開けませんでした。ページを開き直してもう一度押すか、下の「予定のファイルを保存する」を使ってください。');
+  });
 
   // ---------- 話す ----------
   function ttsOk() { return 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'; }
@@ -348,6 +383,6 @@
     else setMic('待っています');
   });
 
-  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
   refresh();
 })();
