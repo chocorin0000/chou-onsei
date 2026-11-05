@@ -1,6 +1,6 @@
 // 電波がないときでも開けるように、ページのファイルを覚えておく。
 // 電波があるときは、いつもサーバーから新しいものを読む（直した版がすぐに届くように）。
-const CACHE = 'onsei-v7';
+const CACHE = 'onsei-v8';
 const ICS_CACHE = 'onsei-ics'; // 今の予定のファイル（app.js が入れる）。サーバーには送らない
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png',
   'js/date.js', 'js/app.js'];

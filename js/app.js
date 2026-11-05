@@ -134,14 +134,15 @@
   const AFTER_TTS_MS = 400;                 // 読み上げが終わってから聞き始めるまで
   const QUIET_MS = 1500;                   // 話し終わりと決めるまでの時間（iPhone 任せだと、まばらになる）
 
-  function listen() {
+  let captureRetries = 0;
+  function listen(extraMs) {
     stopListening();
     if (!SR || recDenied >= 2) { openTyper(step, true); return; }
     const my = gen;
-    $('heard').textContent = '';
+    if (!retries) $('heard').textContent = '';  // 聞き直しのときは、理由を残す
     setMic('準備しています');
     // 前の聞き取りが完全に終わってから次を始める
-    Promise.race([recEnded, delay(1000)]).then(() => delay(AFTER_TTS_MS)).then(() => { if (my === gen) startRec(my); });
+    Promise.race([recEnded, delay(1000)]).then(() => delay(AFTER_TTS_MS + (extraMs || 0))).then(() => { if (my === gen) startRec(my); });
   }
 
   function startRec(my) {
@@ -196,6 +197,18 @@
       finished = true;
       clearTimeout(hard); clearTimeout(quiet);
       rec = null;
+      if (e.error === 'audio-capture') {
+        // ほかのアプリから戻った直後などに、一時的にマイクを取れないことがある。少し待って自分でやり直す
+        if (captureRetries < 3) {
+          captureRetries++;
+          setMic('マイクの準備を待っています');
+          listen(captureRetries * 1000);
+          return;
+        }
+        captureRetries = 0;
+        waitForTap('マイクを使えませんでした。ほかのアプリがマイクを使っていないか確かめて、「もう一度聞く」を押してください。');
+        return;
+      }
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         recDenied++;
         if (recDenied >= 2) { openTyper(step, true); return; }
@@ -218,7 +231,9 @@
     retries++;
     $('heard').textContent = '（' + diag + '）';
     if (retries > 2) { waitForTap('聞き取れませんでした。「もう一度聞く」を押してください。'); return; }
-    say('聞き取れませんでした。もう一度お願いします。', listen);
+    // 声で案内すると、また音の出し入れが切り替わって聞き取りにくくなるので、文字だけにして間を長くする
+    setPrompt('聞き取れませんでした。もう一度どうぞ。');
+    listen(retries * 600);
   }
 
   function waitForTap(text) {
@@ -242,6 +257,7 @@
     closeTyper();
     step = s;
     retries = 0;
+    captureRetries = 0;
     refresh();
     if (s === Step.READY) { say(summary(), null); return; }
     say(PROMPT[s], listen);
@@ -457,8 +473,8 @@
       return;
     }
     if (mode !== 'fresh') return;
-    // iPhone は戻った直後だと音が出ないことがあるので、少し待つ
-    setTimeout(() => { if (!document.hidden) startFresh(); }, 300);
+    // iPhone は戻った直後だと音が出なかったり、マイクを取れなかったりするので、少し待つ
+    setTimeout(() => { if (!document.hidden) startFresh(); }, 1000);
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) goneAway(); else cameBack(); });
   // カレンダーの追加の画面は、ページが裏に回らずに閉じることがある
