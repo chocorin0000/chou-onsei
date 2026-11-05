@@ -36,7 +36,7 @@ h1 { margin:0; color:var(--gold); font-size:24px; }
 .two { display:flex; gap:10px; }
 .two .btn { flex:1; }
 .hide { display:none !important; }
-#fileLink { display:block; text-align:center; color:var(--sub); font-size:14px; padding:10px 0 0; }
+#fileLink, #gcalReset { display:block; text-align:center; color:var(--sub); font-size:14px; padding:10px 0 0; }
 #typer { background:var(--card); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
 #typer label { color:var(--sub); font-size:13px; }
 #typeBox { display:block; width:100%; margin-top:6px; min-height:64px; border:1px solid #47564F; border-radius:10px; background:#0D1310; color:var(--text); font:inherit; font-size:18px; padding:8px; resize:vertical; }
@@ -72,6 +72,11 @@ h1 { margin:0; color:var(--gold); font-size:24px; }
     <a class="btn gold" id="bIcs" href="#"></a>
     <a class="btn blue" id="bGoogle" href="#" target="_blank" rel="noopener">Google カレンダーへ</a>
     <a id="fileLink" href="#" download="yotei.ics">うまく開かないとき: 予定のファイルを保存する</a>
+    <a id="gcalReset" class="hide" href="#">Google カレンダーのアプリの有無を選び直す</a>
+  </div>
+  <div id="gcalAsk" class="hide">
+    <a class="btn blue" id="gcalYes" href="#" target="_blank" rel="noopener">はい（開く）</a>
+    <button class="btn" id="gcalNo">いいえ</button>
   </div>
   <div id="fixPick" class="hide">
     <button class="btn" id="fixTitle">タイトル</button>

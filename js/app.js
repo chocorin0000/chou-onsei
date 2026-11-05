@@ -10,7 +10,7 @@
   let rec = null, afterSpeak = null, speakWatch = null, speakGen = 0;
   let recDenied = 0, editing = null;
   let icsUrl = null, currentIcs = '', icsVer = 0;
-  let destAt = 0, awayMode = '', picking = false;
+  let destAt = 0, awayMode = '', picking = false, askingGcal = false;
   const ICS_PATH = 'ics/yotei.ics';
 
   const ua = navigator.userAgent;
@@ -22,13 +22,21 @@
   function setPrompt(t) { $('prompt').textContent = t; }
   function setMic(t, cls) { const m = $('mic'); m.textContent = t; m.className = cls || ''; }
 
+  // iPhone のページからはアプリの有無を調べられないので、最初に 1 回だけ聞いて覚える
+  function gcalAnswer() { try { return localStorage.getItem('onsei.gcalApp'); } catch (e) { return null; } }
+  function setGcalAnswer(v) {
+    try { if (v) localStorage.setItem('onsei.gcalApp', v); else localStorage.removeItem('onsei.gcalApp'); } catch (e) { /* 覚えられないときは次も聞く */ }
+  }
+
   function refresh() {
     $('vTitle').textContent = title || '（まだ）';
     $('vDate').textContent = date ? DateParser.speak(date) : '（まだ）';
     $('vDesc').textContent = !descAsked ? '（まだ）' : desc || 'なし';
     const ready = !!title && !!date;
-    $('dest').classList.toggle('hide', picking || !ready || step === Step.TITLE || step === Step.DATE || step === Step.DESC);
-    $('ctl').classList.toggle('hide', picking);
+    $('dest').classList.toggle('hide', picking || askingGcal || !ready || step === Step.TITLE || step === Step.DATE || step === Step.DESC);
+    $('ctl').classList.toggle('hide', picking || askingGcal);
+    $('gcalAsk').classList.toggle('hide', !askingGcal);
+    $('gcalReset').classList.toggle('hide', !isIOS || !gcalAnswer());
     $('fixPick').classList.toggle('hide', !picking);
     $('bStart').classList.toggle('hide', step !== Step.IDLE || ready);
     $('bMic').textContent = step === Step.IDLE || step === Step.READY ? '項目ごとに修正' : 'もう一度聞く';
@@ -262,7 +270,7 @@
   }
 
   function clearAll() {
-    title = ''; desc = ''; date = null; dateRaw = ''; descAsked = false; returnToReady = false; picking = false;
+    title = ''; desc = ''; date = null; dateRaw = ''; descAsked = false; returnToReady = false; picking = false; askingGcal = false;
     $('heard').textContent = '';
   }
 
@@ -323,7 +331,7 @@
   function openTyper(s, answering) {
     stopListening();
     stopSpeaking();
-    if (picking) { picking = false; refresh(); }
+    if (picking || askingGcal) { picking = false; askingGcal = false; refresh(); }
     editing = { s, answering };
     const label = s === Step.TITLE ? 'タイトル' : s === Step.DATE ? '日時（例: あしたの午後3時から5時まで）' : '説明（なければ空のまま）';
     $('typeLabel').textContent = label;
@@ -411,7 +419,43 @@
     recDenied = 0;
     begin();
   };
-  $('bGoogle').addEventListener('click', () => { destAt = Date.now(); });
+  function askGcal() {
+    askingGcal = true;
+    $('gcalYes').href = $('bGoogle').href;
+    refresh();
+    say('Google カレンダーのアプリは入っていますか？', () => setMic('待っています'));
+  }
+  function gcalMissing() {
+    say('Google カレンダーはインストールされていません。', () => setMic('待っています'));
+  }
+  $('bGoogle').addEventListener('click', e => {
+    if (isIOS && gcalAnswer() !== 'yes') {
+      e.preventDefault();
+      if (gcalAnswer() === 'no') gcalMissing(); else askGcal();
+      return;
+    }
+    destAt = Date.now();
+  });
+  $('gcalYes').addEventListener('click', () => {
+    stopSpeaking();
+    setGcalAnswer('yes');
+    askingGcal = false;
+    destAt = Date.now();
+    refresh();
+    setMic('待っています');
+    setPrompt('よければ、登録先のボタンを押してください。');
+  });
+  $('gcalNo').onclick = () => {
+    setGcalAnswer('no');
+    askingGcal = false;
+    refresh();
+    gcalMissing();
+  };
+  $('gcalReset').addEventListener('click', e => {
+    e.preventDefault();
+    setGcalAnswer(null);
+    askGcal();
+  });
   $('cTitle').onclick = () => openTyper(Step.TITLE, false);
   $('cDate').onclick = () => openTyper(Step.DATE, false);
   $('cDesc').onclick = () => openTyper(Step.DESC, false);
