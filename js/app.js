@@ -10,7 +10,7 @@
   let rec = null, afterSpeak = null, speakWatch = null, speakGen = 0;
   let recDenied = 0, editing = null;
   let icsUrl = null, currentIcs = '', icsVer = 0;
-  let tapped = false, destAt = 0, awayMode = '';
+  let tapped = false, destAt = 0, awayMode = '', picking = false;
   const ICS_PATH = 'ics/yotei.ics';
 
   const ua = navigator.userAgent;
@@ -27,9 +27,11 @@
     $('vDate').textContent = date ? DateParser.speak(date) : '（まだ）';
     $('vDesc').textContent = !descAsked ? '（まだ）' : desc || 'なし';
     const ready = !!title && !!date;
-    $('dest').classList.toggle('hide', !ready || step === Step.TITLE || step === Step.DATE || step === Step.DESC);
+    $('dest').classList.toggle('hide', picking || !ready || step === Step.TITLE || step === Step.DATE || step === Step.DESC);
+    $('ctl').classList.toggle('hide', picking);
+    $('fixPick').classList.toggle('hide', !picking);
     $('bStart').classList.toggle('hide', step !== Step.IDLE || ready);
-    $('bMic').textContent = step === Step.IDLE || step === Step.READY ? '声で入れ直す' : 'もう一度聞く';
+    $('bMic').textContent = step === Step.IDLE || step === Step.READY ? '項目ごとに修正' : 'もう一度聞く';
     $('bMic').classList.toggle('hide', step === Step.IDLE && !ready);
     if (ready) updateLinks();
   }
@@ -129,7 +131,7 @@
   const delay = ms => new Promise(r => setTimeout(r, ms));
   let recEnded = Promise.resolve();
   let diag = '';
-  const AFTER_TTS_MS = 200;                 // 読み上げが終わってから聞き始めるまで
+  const AFTER_TTS_MS = 400;                 // 読み上げが終わってから聞き始めるまで
   const QUIET_MS = 1500;                   // 話し終わりと決めるまでの時間（iPhone 任せだと、まばらになる）
 
   function listen() {
@@ -246,7 +248,7 @@
   }
 
   function clearAll() {
-    title = ''; desc = ''; date = null; dateRaw = ''; descAsked = false; returnToReady = false;
+    title = ''; desc = ''; date = null; dateRaw = ''; descAsked = false; returnToReady = false; picking = false;
     $('heard').textContent = '';
   }
 
@@ -269,6 +271,7 @@
     const w = best.replace(/[\s、。!！?？]/g, '');
     if (['キャンセル', '中止', 'やめる', 'やめます', '終わり'].includes(w)) {
       stopListening();
+      if (returnToReady) { returnToReady = false; ask(Step.READY); return; }  // 修正をやめるだけ。入れた内容は消さない
       clearAll();
       step = Step.IDLE;
       refresh();
@@ -306,6 +309,7 @@
   function openTyper(s, answering) {
     stopListening();
     stopSpeaking();
+    if (picking) { picking = false; refresh(); }
     editing = { s, answering };
     const label = s === Step.TITLE ? 'タイトル' : s === Step.DATE ? '日時（例: あしたの午後3時から5時まで）' : '説明（なければ空のまま）';
     $('typeLabel').textContent = label;
@@ -320,6 +324,7 @@
 
   function closeTyper() {
     editing = null;
+    if (picking) { picking = false; refresh(); }
     $('typer').classList.add('hide');
   }
 
@@ -363,12 +368,30 @@
     retries = 0;
     closeTyper();
     if (step === Step.IDLE || step === Step.READY) {
-      if (!title) ask(Step.TITLE);
-      else if (!date) ask(Step.DATE);
-      else { returnToReady = false; ask(Step.TITLE); }
+      picking = true;
+      refresh();
+      say('どの項目を直しますか？', () => setMic('待っています'));
       return;
     }
     ask(step);
+  };
+  function fixItem(s) {
+    tapped = true;
+    stopSpeaking();
+    recDenied = 0;
+    picking = false;
+    returnToReady = true;
+    ask(s);
+  }
+  $('fixTitle').onclick = () => fixItem(Step.TITLE);
+  $('fixDate').onclick = () => fixItem(Step.DATE);
+  $('fixDesc').onclick = () => fixItem(Step.DESC);
+  $('fixCancel').onclick = () => {
+    stopSpeaking();
+    picking = false;
+    refresh();
+    setMic('待っています');
+    setPrompt('よければ、登録先のボタンを押してください。');
   };
   $('bNew').onclick = () => {
     tapped = true;
