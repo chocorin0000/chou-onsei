@@ -17,7 +17,8 @@
   const isIPhone = /iPhone|iPod/.test(ua);
   const isIPad = /iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isIOS = isIPhone || isIPad;
-  const deviceName = isIPhone ? 'iPhone' : isIPad ? 'iPad' : /Android/.test(ua) ? 'スマホ' : 'パソコン';
+  const isAndroid = /Android/.test(ua);
+  const deviceName = isIPhone ? 'iPhone' : isIPad ? 'iPad' : isAndroid ? 'スマホ' : 'パソコン';
 
   function setPrompt(t) { $('prompt').textContent = t; }
   function setMic(t, cls) { const m = $('mic'); m.textContent = t; m.className = cls || ''; }
@@ -168,18 +169,32 @@
   }
 
   function startRec(my) {
-    let r;
-    try { r = new SR(); } catch (e) { openTyper(step, true); return; }
-    rec = r;
-    r.lang = 'ja-JP';
-    r.continuous = true;   // 話し終わりは iPhone に任せず、設定の無音の時間で決める
-    r.interimResults = true;
-    r.maxAlternatives = 5;
-    let markEnd;
-    recEnded = new Promise(res => { markEnd = res; });
-    let interim = '', alts = null, finished = false, quiet = null, sawAudio = false, sawSpeech = false, lastErr = '';
-    const heardList = () => (!interim ? [] : alts && alts.length ? alts : [interim]);
-    const hard = setTimeout(() => { if (!lastErr) lastErr = '時間切れ'; finish(heardList()); }, val.listen);
+    // Android の Chrome は continuous でも、話し終わりの約 1 秒、黙っていると約 5 秒で自分で終わる。
+    // 設定の時間がたつまで聞き直して、言葉をつなぐ（iPhone は自動で聞き直すと声が入らなくなるのでしない）
+    const canRestart = isAndroid;
+    let r = null, startedAt = 0;
+    const parts = [];      // 前の聞き取りまでの言葉
+    let interim = '', alts = null, carry = false, finished = false, quiet = null, sawAudio = false, sawSpeech = false, lastErr = '';
+    let inSpeech = false, hardWaits = 0, hardAt = 0, retold = 0;
+    let markEnd = () => {};
+    const heardList = () => {
+      const head = parts.join('');
+      if (!interim) return head ? [head] : [];
+      return alts && alts.length ? alts.map(x => head + x) : [head + interim];
+    };
+    const armQuiet = extra => {
+      clearTimeout(quiet);
+      quiet = setTimeout(() => finish(heardList()), val.quiet + (extra || 0));
+    };
+    let hard = null;
+    const onHard = () => {
+      // 話している途中なら、文字が届くのを待つ
+      if (canRestart && inSpeech && hardWaits < 15) { hardWaits++; armHard(1000); return; }
+      if (!lastErr) lastErr = '時間切れ';
+      finish(heardList());
+    };
+    const armHard = ms => { clearTimeout(hard); hardAt = performance.now() + ms; hard = setTimeout(onHard, ms); };
+    armHard(val.listen);
     function finish(list) {
       if (finished) return;
       finished = true;
@@ -191,61 +206,104 @@
       if (list.length) $('heard').textContent = '「' + list[0].trim() + '」';
       Promise.race([recEnded, delay(400)]).then(() => { if (my === gen) onHeard(list); });
     }
-    r.onstart = () => { if (my === gen) setMic('聞いています。どうぞ', 'listen'); };
-    r.onaudiostart = () => { sawAudio = true; };
-    r.onspeechstart = () => { sawSpeech = true; };
-    r.onresult = e => {
-      if (my !== gen || finished) return;
-      let text = '';
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      // ひと続きのときは、日時を読むために、ほかの候補も取っておく
-      alts = null;
-      if (e.results.length === 1) {
-        alts = [];
-        for (let k = 0; k < e.results[0].length; k++) if (e.results[0][k].transcript) alts.push(e.results[0][k].transcript);
-      }
-      interim = text;
-      sawSpeech = true;
-      $('heard').textContent = text;
-      clearTimeout(hard);  // 話している間は、時間切れにしない
-      clearTimeout(quiet);
-      quiet = setTimeout(() => finish(heardList()), val.quiet);
-    };
-    r.onerror = e => {
-      lastErr = e.error || '';
-      if (my !== gen || finished) return;
-      if (e.error === 'no-speech' || e.error === 'aborted') return; // onend でまとめて扱う
-      finished = true;
-      clearTimeout(hard); clearTimeout(quiet);
-      rec = null;
-      if (e.error === 'audio-capture') {
-        // ほかのアプリから戻った直後などに、一時的にマイクを取れないことがある。少し待って自分でやり直す
-        if (captureRetries < 3) {
-          captureRetries++;
-          setMic('マイクの準備を待っています');
-          listen(captureRetries * 1000);
+
+    function open() {
+      try { r = new SR(); } catch (e) { openTyper(step, true); return; }
+      rec = r;
+      r.lang = 'ja-JP';
+      r.continuous = true;   // 話し終わりは本体に任せず、設定の無音の時間で決める
+      r.interimResults = true;
+      r.maxAlternatives = 5;
+      recEnded = new Promise(res => { markEnd = res; });
+      startedAt = performance.now();
+      r.onstart = () => { if (my === gen && !finished) setMic('聞いています。どうぞ', 'listen'); };
+      r.onaudiostart = () => { sawAudio = true; };
+      r.onspeechstart = () => {
+        sawSpeech = true;
+        if (!canRestart || finished) return;
+        inSpeech = true;
+        clearTimeout(quiet);  // 話している間は数えない。終わったら onend で数え始める
+      };
+      r.onresult = e => {
+        if (my !== gen || finished) return;
+        let got = [];
+        for (let i = 0; i < e.results.length; i++) if (e.results[i][0].transcript) got.push(e.results[i]);
+        // Android の Chrome は、途中の結果が空の文字で、同じ文の確定が 2 回届くことがある。最後の 1 つが文の全部
+        if (canRestart) got = got.slice(-1);
+        const text = got.map(x => x[0].transcript).join('');
+        if (text) {
+          if (carry) { parts.push(interim); carry = false; }
+          interim = text;
+          // ひと続きのときは、日時を読むために、ほかの候補も取っておく
+          alts = null;
+          if (got.length === 1) {
+            alts = [];
+            for (let k = 0; k < got[0].length; k++) if (got[0][k].transcript) alts.push(got[0][k].transcript);
+          }
+          $('heard').textContent = parts.join('') + text;
+        }
+        sawSpeech = true;
+        if (canRestart) {
+          // 空の結果だけのときは聞けたとは限らない。聞く時間を続ける。ふつうは onend で数え始める（これは終わりが来ないときの保険）
+          if (text) { clearTimeout(hard); armQuiet(4000); }
           return;
         }
-        captureRetries = 0;
-        waitForTap('マイクを使えませんでした。ほかのアプリがマイクを使っていないか確かめて、「もう一度聞く」を押してください。');
-        return;
+        clearTimeout(hard);  // 話している間は、時間切れにしない
+        armQuiet();
+      };
+      r.onerror = e => {
+        lastErr = e.error || '';
+        if (my !== gen || finished) return;
+        if (e.error === 'no-speech' || e.error === 'aborted') return; // onend でまとめて扱う
+        if (canRestart && heardList().length) { finish(heardList()); return; }  // 聞き直しの失敗。聞けた分で進む
+        finished = true;
+        clearTimeout(hard); clearTimeout(quiet);
+        rec = null;
+        if (e.error === 'audio-capture') {
+          // ほかのアプリから戻った直後などに、一時的にマイクを取れないことがある。少し待って自分でやり直す
+          if (captureRetries < 3) {
+            captureRetries++;
+            setMic('マイクの準備を待っています');
+            listen(captureRetries * 1000);
+            return;
+          }
+          captureRetries = 0;
+          waitForTap('マイクを使えませんでした。ほかのアプリがマイクを使っていないか確かめて、「もう一度聞く」を押してください。');
+          return;
+        }
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          recDenied++;
+          if (recDenied >= 2) { openTyper(step, true); return; }
+          waitForTap('マイクが使えません。設定でマイクを許可して「もう一度聞く」を押してください。');
+        } else if (e.error === 'network') {
+          waitForTap('音声認識につながりません。インターネットを確かめて、「もう一度聞く」を押してください。');
+        } else {
+          waitForTap('音声認識でエラーが出ました（' + e.error + '）。「もう一度聞く」を押してください。');
+        }
+      };
+      r.onend = () => {
+        markEnd();
+        if (my !== gen || finished) return;
+        if (!canRestart) { finish(heardList()); return; }
+        // 時間切れか無音のタイマーが、聞き直しを終わらせる。すぐ終わるときは間をあける
+        if (inSpeech && !heardList().length) {
+          // 声は聞こえたが文字にならなかった。言い直してもらう（聞く時間の残りが短ければ少し足す）
+          $('heard').textContent = '（聞き取れませんでした。もう一度どうぞ）';
+          if (retold < 3 && hardAt - performance.now() < 5000) { retold++; armHard(5000); }
+        }
+        inSpeech = false;
+        carry = !!interim;
+        if (interim) armQuiet();  // 話し終わりから、設定の時間を数える
+        setTimeout(() => { if (my === gen && !finished) open(); }, performance.now() - startedAt < 300 ? 300 : 0);
+      };
+      try { r.start(); } catch (e) {
+        markEnd();
+        if (heardList().length) { finish(heardList()); return; }
+        rec = null;
+        waitForTap('「もう一度聞く」を押してください。');
       }
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        recDenied++;
-        if (recDenied >= 2) { openTyper(step, true); return; }
-        waitForTap('マイクが使えません。設定でマイクを許可して「もう一度聞く」を押してください。');
-      } else if (e.error === 'network') {
-        waitForTap('音声認識につながりません。インターネットを確かめて、「もう一度聞く」を押してください。');
-      } else {
-        waitForTap('音声認識でエラーが出ました（' + e.error + '）。「もう一度聞く」を押してください。');
-      }
-    };
-    r.onend = () => {
-      markEnd();
-      if (my !== gen || finished) return;
-      finish(heardList());
-    };
-    try { r.start(); } catch (e) { markEnd(); rec = null; waitForTap('「もう一度聞く」を押してください。'); }
+    }
+    open();
   }
 
   function didNotHear() {
