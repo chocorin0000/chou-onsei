@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>超！音声予定</title>
+<meta name="description" content="声で予定を入れて、iPhone のカレンダーか Google カレンダーに登録する">
+<meta name="theme-color" content="#0F1512">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="超！音声予定">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root { --bg:#0F1512; --gold:#FFC94D; --text:#F2F4F3; --sub:#9FB0A8; --card:#1C2622; --btn:#2C3A34; --listen:#E5484D; --speak:#2FBF71; --off:#3A4641; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo","Noto Sans JP",sans-serif; }
+#app { max-width:560px; margin:0 auto; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;
+  padding:calc(env(safe-area-inset-top) + 12px) 18px calc(env(safe-area-inset-bottom) + 14px); }
+h1 { margin:0; color:var(--gold); font-size:24px; }
+#prompt { font-size:21px; font-weight:700; line-height:1.4; min-height:92px; padding:12px 0 6px; }
+#mic { border-radius:14px; padding:14px 12px; text-align:center; font-size:18px; font-weight:700; color:#fff; background:var(--off); }
+#mic.listen { background:var(--listen); }
+#mic.speak { background:var(--speak); }
+#heard { color:var(--sub); font-size:16px; min-height:44px; padding:10px 0 8px; overflow-wrap:anywhere; }
+.card { display:block; width:100%; border:0; text-align:left; font:inherit; color:inherit; background:var(--card); border-radius:12px; padding:10px 14px 12px; margin-bottom:8px; cursor:pointer; }
+.card small { display:block; color:var(--sub); font-size:13px; }
+.card span { display:block; font-size:18px; min-height:25px; overflow-wrap:anywhere; white-space:pre-wrap; }
+.grow { flex:1; min-height:8px; }
+.btn { display:block; width:100%; border:0; border-radius:14px; min-height:58px; padding:12px; margin-top:10px; font:inherit; font-size:18px; font-weight:700; text-align:center; text-decoration:none; color:#fff; background:var(--btn); cursor:pointer; }
+.gold { background:var(--gold); color:#17120A; }
+.blue { background:#2F6FDE; color:#fff; }
+.two { display:flex; gap:10px; }
+.two .btn { flex:1; }
+.hide { display:none !important; }
+#fileLink { display:block; text-align:center; color:var(--sub); font-size:14px; padding:10px 0 0; }
+#typer { background:var(--card); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
+#typer label { color:var(--sub); font-size:13px; }
+#typeBox { display:block; width:100%; margin-top:6px; min-height:64px; border:1px solid #47564F; border-radius:10px; background:#0D1310; color:var(--text); font:inherit; font-size:18px; padding:8px; resize:vertical; }
+#typeTip { color:var(--sub); font-size:13px; padding-top:6px; }
+#typer .btn { min-height:48px; font-size:16px; margin-top:8px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>超！音声予定</h1>
+  <div id="prompt">「開始」を押すと、声で聞いていきます。</div>
+  <div id="mic">待っています</div>
+  <div id="heard"></div>
+
+  <div id="typer" class="hide">
+    <label id="typeLabel" for="typeBox"></label>
+    <textarea id="typeBox" rows="2"></textarea>
+    <div id="typeTip">キーボードのマイクのボタンで、声でも入れられます。</div>
+    <div class="two">
+      <button class="btn gold" id="typeOk">決定</button>
+      <button class="btn" id="typeVoice">声で入れ直す</button>
+      <button class="btn" id="typeCancel">やめる</button>
+    </div>
+  </div>
+
+  <button class="card" id="cTitle"><small>タイトル</small><span id="vTitle"></span></button>
+  <button class="card" id="cDate"><small>日時</small><span id="vDate"></span></button>
+  <button class="card" id="cDesc"><small>説明</small><span id="vDesc"></span></button>
+
+  <div class="grow"></div>
+
+  <div id="dest" class="hide">
+    <a class="btn gold" id="bIcs" href="#"></a>
+    <a class="btn blue" id="bGoogle" href="#" target="_blank" rel="noopener">Google カレンダーへ</a>
+    <a id="fileLink" href="#" download="yotei.ics">うまく開かないとき: 予定のファイルを保存する</a>
+  </div>
+  <button class="btn gold" id="bStart">開始</button>
+  <div class="two" id="ctl">
+    <button class="btn" id="bMic">もう一度聞く</button>
+    <button class="btn" id="bNew">最初から</button>
+  </div>
+</div>
+<script src="js/date.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
