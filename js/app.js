@@ -38,6 +38,9 @@
     $('ctl').classList.toggle('hide', picking || askingGcal);
     $('gcalAsk').classList.toggle('hide', !askingGcal);
     $('gcalReset').classList.toggle('hide', !isIOS || !gcalAnswer());
+    // Android の Chrome では .ics がただのダウンロードになるので、Google カレンダーだけにする
+    $('bIcs').classList.toggle('hide', isAndroid);
+    $('fileLink').classList.toggle('hide', isAndroid);
     $('fixPick').classList.toggle('hide', !picking);
     $('bStart').classList.toggle('hide', step !== Step.IDLE || ready);
     $('androidNote').classList.toggle('hide', !isAndroid || step !== Step.IDLE || ready);
