@@ -141,7 +141,13 @@
   let diag = '';
   const AFTER_TTS_MS = 400;                 // 読み上げが終わってから聞き始めるまで
   const LISTEN_MAX_MS = 10000;              // 黙っていても、この間は聞き続ける
-  const QUIET_MS = 1500;                   // 話し終わりと決めるまでの時間（iPhone 任せだと、まばらになる）
+  const QUIET_DEFAULT = 2000, QUIET_MIN = 1000, QUIET_MAX = 5000, QUIET_STEP = 500;
+  let quietMs = QUIET_DEFAULT;
+  try {
+    const v = Number(localStorage.getItem('onsei.quietMs'));
+    if (v >= QUIET_MIN && v <= QUIET_MAX) quietMs = v;
+  } catch (e) { /* 覚えられないときは初めの値 */ }
+  // quietMs: 話し終わりと決めるまでの時間（設定で変えられる）
 
   let captureRetries = 0;
   function listen(extraMs) {
@@ -159,7 +165,7 @@
     try { r = new SR(); } catch (e) { openTyper(step, true); return; }
     rec = r;
     r.lang = 'ja-JP';
-    r.continuous = true;   // 話し終わりは iPhone に任せず、QUIET_MS の無音で決める
+    r.continuous = true;   // 話し終わりは iPhone に任せず、quietMs の無音で決める
     r.interimResults = true;
     r.maxAlternatives = 5;
     let markEnd;
@@ -196,7 +202,7 @@
       $('heard').textContent = text;
       clearTimeout(hard);  // 話している間は、時間切れにしない
       clearTimeout(quiet);
-      quiet = setTimeout(() => finish(heardList()), QUIET_MS);
+      quiet = setTimeout(() => finish(heardList()), quietMs);
     };
     r.onerror = e => {
       lastErr = e.error || '';
@@ -374,6 +380,22 @@
     setMic('待っています');
     setPrompt(title && date ? 'よければ、登録先のボタンを押してください。' : '残りの欄を入れてください。');
   }
+
+  // ---------- 設定 ----------
+  function showQuiet() {
+    $('quietVal').textContent = (quietMs / 1000).toFixed(1) + ' 秒';
+    $('quietDown').disabled = quietMs <= QUIET_MIN;
+    $('quietUp').disabled = quietMs >= QUIET_MAX;
+  }
+  function changeQuiet(d) {
+    quietMs = Math.min(QUIET_MAX, Math.max(QUIET_MIN, quietMs + d));
+    try { localStorage.setItem('onsei.quietMs', String(quietMs)); } catch (e) { /* この間だけ使う */ }
+    showQuiet();
+  }
+  $('quietDown').onclick = () => changeQuiet(-QUIET_STEP);
+  $('quietUp').onclick = () => changeQuiet(QUIET_STEP);
+  $('bSet').onclick = () => { showQuiet(); $('setPanel').classList.toggle('hide'); };
+  $('setClose').onclick = () => $('setPanel').classList.add('hide');
 
   // ---------- ボタン ----------
   $('bStart').onclick = () => {

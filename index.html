@@ -21,6 +21,15 @@ html, body { margin:0; background:var(--bg); color:var(--text);
 #app { max-width:560px; margin:0 auto; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;
   padding:calc(env(safe-area-inset-top) + 12px) 18px calc(env(safe-area-inset-bottom) + 14px); }
 h1 { margin:0; color:var(--gold); font-size:24px; }
+#head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+#bSet { border:0; border-radius:10px; min-height:40px; padding:6px 14px; font:inherit; font-size:15px; color:var(--text); background:var(--btn); cursor:pointer; }
+#setPanel { background:var(--card); border-radius:12px; padding:12px 14px; margin:8px 0; }
+#setPanel label { display:block; font-size:16px; font-weight:700; }
+#setTip { color:var(--sub); font-size:13px; padding:4px 0 8px; }
+#setRow { display:flex; align-items:center; gap:10px; }
+#setRow .btn { flex:1; margin:0; font-size:26px; }
+#quietVal { flex:1.4; text-align:center; font-size:22px; font-weight:700; }
+#setClose { min-height:48px; font-size:16px; margin-top:10px; }
 #prompt { font-size:21px; font-weight:700; line-height:1.4; min-height:92px; padding:12px 0 6px; }
 #mic { border-radius:14px; padding:14px 12px; text-align:center; font-size:18px; font-weight:700; color:#fff; background:var(--off); }
 #mic.listen { background:var(--listen); }
@@ -46,7 +55,17 @@ h1 { margin:0; color:var(--gold); font-size:24px; }
 </head>
 <body>
 <div id="app">
-  <h1>超！音声予定</h1>
+  <div id="head"><h1>超！音声予定</h1><button id="bSet">設定</button></div>
+  <div id="setPanel" class="hide">
+    <label>話し終わりの待ち時間</label>
+    <div id="setTip">話すのをやめてから、この時間がたつと次へ進みます。途中で切れるときは長くしてください。</div>
+    <div id="setRow">
+      <button class="btn" id="quietDown" aria-label="短くする">−</button>
+      <div id="quietVal"></div>
+      <button class="btn" id="quietUp" aria-label="長くする">＋</button>
+    </div>
+    <button class="btn" id="setClose">閉じる</button>
+  </div>
   <div id="prompt">「開始」を押すと、声で聞いていきます。</div>
   <div id="mic">待っています</div>
   <div id="heard"></div>
