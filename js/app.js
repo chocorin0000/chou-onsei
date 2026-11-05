@@ -10,7 +10,7 @@
   let rec = null, afterSpeak = null, speakWatch = null, speakGen = 0;
   let recDenied = 0, editing = null;
   let icsUrl = null, currentIcs = '', icsVer = 0;
-  let tapped = false, destAt = 0, pendingFresh = false;
+  let tapped = false, destAt = 0, awayMode = '';
   const ICS_PATH = 'ics/yotei.ics';
 
   const ua = navigator.userAgent;
@@ -401,31 +401,49 @@
   };
 
   // 裏に回ったら止める。戻ってきたら最初から始める
-  // （登録先のボタンを押した直後に裏に回ったときだけ、登録できなかったときのために画面を残す）
-  function startFresh() {
+  // 登録先のボタンを押して離れたときは、消すだけで話さない（すぐ戻ったときは開けなかったと見て、画面を残す）
+  const DEST_LEFT_MS = 10000, DEST_SHORT_MS = 5000;
+  function cleanScreen(text) {
     closeTyper();
     recDenied = 0;
-    if (tapped) { begin(); return; }
     clearAll();
     step = Step.IDLE;
     refresh();
     setMic('待っています');
-    setPrompt('「開始」を押すと、声で聞いていきます。');
+    setPrompt(text);
+  }
+  function startFresh() {
+    if (tapped) { closeTyper(); recDenied = 0; begin(); return; }
+    cleanScreen('「開始」を押すと、声で聞いていきます。');
+  }
+  function afterDest() {
+    cleanScreen('次の予定を入れるときは、「開始」を押してください。');
   }
   function goneAway() {
     stopSpeaking();
     stopListening();
     setMic('待っています');
-    pendingFresh = Date.now() - destAt > 3000;
-    destAt = 0;
+    awayMode = destAt && Date.now() - destAt < DEST_LEFT_MS ? 'dest' : 'fresh';
   }
   function cameBack() {
-    if (!pendingFresh) return;
-    pendingFresh = false;
+    const mode = awayMode, since = Date.now() - destAt;
+    awayMode = '';
+    destAt = 0;
+    if (mode === 'dest') {
+      if (since >= DEST_SHORT_MS) afterDest();
+      return;
+    }
+    if (mode !== 'fresh') return;
     // iPhone は戻った直後だと音が出ないことがあるので、少し待つ
     setTimeout(() => { if (!document.hidden) startFresh(); }, 300);
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) goneAway(); else cameBack(); });
+  // カレンダーの追加の画面は、ページが裏に回らずに閉じることがある
+  window.addEventListener('focus', () => {
+    if (document.hidden || awayMode || !destAt || Date.now() - destAt < DEST_SHORT_MS) return;
+    destAt = 0;
+    afterDest();
+  });
 
   if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
   refresh();
