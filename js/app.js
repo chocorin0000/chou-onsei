@@ -10,6 +10,7 @@
   let rec = null, afterSpeak = null, speakWatch = null, speakGen = 0;
   let recDenied = 0, editing = null;
   let icsUrl = null, currentIcs = '', icsVer = 0;
+  let tapped = false, destAt = 0, pendingFresh = false;
   const ICS_PATH = 'ics/yotei.ics';
 
   const ua = navigator.userAgent;
@@ -74,7 +75,7 @@
     let ok = false;
     try { ok = await prepareIcs(); } catch (er) { ok = false; }
     setMic('待っています');
-    if (ok) location.href = $('bIcs').href;
+    if (ok) { destAt = Date.now(); location.href = $('bIcs').href; }
     else setPrompt('開けませんでした。ページを開き直してもう一度押すか、下の「予定のファイルを保存する」を使ってください。');
   });
 
@@ -349,12 +350,14 @@
 
   // ---------- ボタン ----------
   $('bStart').onclick = () => {
+    tapped = true;
     // iPhone は、タップの中で一度話さないと、そのあと音が出ない
     if (ttsOk()) { try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) { /* */ } }
     recDenied = 0;
     begin();
   };
   $('bMic').onclick = () => {
+    tapped = true;
     stopSpeaking();
     recDenied = 0;
     retries = 0;
@@ -368,12 +371,15 @@
     ask(step);
   };
   $('bNew').onclick = () => {
+    tapped = true;
     stopSpeaking();
     stopListening();
     closeTyper();
     recDenied = 0;
+    tapped = true;
     begin();
   };
+  $('bGoogle').addEventListener('click', () => { destAt = Date.now(); });
   $('cTitle').onclick = () => openTyper(Step.TITLE, false);
   $('cDate').onclick = () => openTyper(Step.DATE, false);
   $('cDesc').onclick = () => openTyper(Step.DESC, false);
@@ -394,15 +400,32 @@
     ask(was.s);
   };
 
-  // 裏に回ったら止める
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) return;
-    const going = step === Step.TITLE || step === Step.DATE || step === Step.DESC;
+  // 裏に回ったら止める。戻ってきたら最初から始める
+  // （登録先のボタンを押した直後に裏に回ったときだけ、登録できなかったときのために画面を残す）
+  function startFresh() {
+    closeTyper();
+    recDenied = 0;
+    if (tapped) { begin(); return; }
+    clearAll();
+    step = Step.IDLE;
+    refresh();
+    setMic('待っています');
+    setPrompt('「開始」を押すと、声で聞いていきます。');
+  }
+  function goneAway() {
     stopSpeaking();
     stopListening();
-    if (going) { setMic('待っています'); setPrompt('止めました。「もう一度聞く」で続きから聞きます。'); }
-    else setMic('待っています');
-  });
+    setMic('待っています');
+    pendingFresh = Date.now() - destAt > 3000;
+    destAt = 0;
+  }
+  function cameBack() {
+    if (!pendingFresh) return;
+    pendingFresh = false;
+    // iPhone は戻った直後だと音が出ないことがあるので、少し待つ
+    setTimeout(() => { if (!document.hidden) startFresh(); }, 300);
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) goneAway(); else cameBack(); });
 
   if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
   refresh();
