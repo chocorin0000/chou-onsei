@@ -132,7 +132,7 @@
   let recEnded = Promise.resolve();
   let diag = '';
   const AFTER_TTS_MS = 400;                 // 読み上げが終わってから聞き始めるまで
-  const LISTEN_MAX_MS = 30000;              // 黙っていても、この間は聞き続ける
+  const LISTEN_MAX_MS = 10000;              // 黙っていても、この間は聞き続ける
   const QUIET_MS = 1500;                   // 話し終わりと決めるまでの時間（iPhone 任せだと、まばらになる）
 
   let captureRetries = 0;
