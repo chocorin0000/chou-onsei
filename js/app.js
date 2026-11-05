@@ -129,7 +129,7 @@
   const delay = ms => new Promise(r => setTimeout(r, ms));
   let recEnded = Promise.resolve();
   let diag = '';
-  const AFTER_TTS_MS = isIOS ? 700 : 200;  // iPhone は読み上げの直後にマイクを開くと、聞こえないことがある
+  const AFTER_TTS_MS = 200;                 // 読み上げが終わってから聞き始めるまで
   const QUIET_MS = 1500;                   // 話し終わりと決めるまでの時間（iPhone 任せだと、まばらになる）
 
   function listen() {
