@@ -139,15 +139,22 @@
   const delay = ms => new Promise(r => setTimeout(r, ms));
   let recEnded = Promise.resolve();
   let diag = '';
-  const AFTER_TTS_MS = 400;                 // 読み上げが終わってから聞き始めるまで
-  const LISTEN_MAX_MS = 10000;              // 黙っていても、この間は聞き続ける
-  const QUIET_DEFAULT = 2000, QUIET_MIN = 1000, QUIET_MAX = 5000, QUIET_STEP = 500;
-  let quietMs = QUIET_DEFAULT;
-  try {
-    const v = Number(localStorage.getItem('onsei.quietMs'));
-    if (v >= QUIET_MIN && v <= QUIET_MAX) quietMs = v;
-  } catch (e) { /* 覚えられないときは初めの値 */ }
-  // quietMs: 話し終わりと決めるまでの時間（設定で変えられる）
+  // 設定で変えられる時間（ミリ秒）
+  const SETTINGS = {
+    quiet: { key: 'onsei.quietMs', def: 2000, min: 1000, max: 5000, step: 100 },    // 話し終わりと決めるまで（iPhone 任せだと、まばらになる）
+    after: { key: 'onsei.afterMs', def: 400, min: 0, max: 2000, step: 100 },        // 読み上げが終わってから聞き始めるまで
+    listen: { key: 'onsei.listenMs', def: 10000, min: 5000, max: 60000, step: 1000 }, // 黙っていても、この間は聞き続ける
+  };
+  const val = {};
+  for (const k of Object.keys(SETTINGS)) {
+    const t = SETTINGS[k];
+    val[k] = t.def;
+    try {
+      const raw = localStorage.getItem(t.key);
+      const v = raw === null ? NaN : Number(raw);
+      if (v >= t.min && v <= t.max) val[k] = v;
+    } catch (e) { /* 覚えられないときは初めの値 */ }
+  }
 
   let captureRetries = 0;
   function listen(extraMs) {
@@ -157,7 +164,7 @@
     if (!retries) $('heard').textContent = '';  // 聞き直しのときは、理由を残す
     setMic('準備しています');
     // 前の聞き取りが完全に終わってから次を始める
-    Promise.race([recEnded, delay(1000)]).then(() => delay(AFTER_TTS_MS + (extraMs || 0))).then(() => { if (my === gen) startRec(my); });
+    Promise.race([recEnded, delay(1000)]).then(() => delay(val.after + (extraMs || 0))).then(() => { if (my === gen) startRec(my); });
   }
 
   function startRec(my) {
@@ -165,14 +172,14 @@
     try { r = new SR(); } catch (e) { openTyper(step, true); return; }
     rec = r;
     r.lang = 'ja-JP';
-    r.continuous = true;   // 話し終わりは iPhone に任せず、quietMs の無音で決める
+    r.continuous = true;   // 話し終わりは iPhone に任せず、設定の無音の時間で決める
     r.interimResults = true;
     r.maxAlternatives = 5;
     let markEnd;
     recEnded = new Promise(res => { markEnd = res; });
     let interim = '', alts = null, finished = false, quiet = null, sawAudio = false, sawSpeech = false, lastErr = '';
     const heardList = () => (!interim ? [] : alts && alts.length ? alts : [interim]);
-    const hard = setTimeout(() => { if (!lastErr) lastErr = '時間切れ'; finish(heardList()); }, LISTEN_MAX_MS);
+    const hard = setTimeout(() => { if (!lastErr) lastErr = '時間切れ'; finish(heardList()); }, val.listen);
     function finish(list) {
       if (finished) return;
       finished = true;
@@ -202,7 +209,7 @@
       $('heard').textContent = text;
       clearTimeout(hard);  // 話している間は、時間切れにしない
       clearTimeout(quiet);
-      quiet = setTimeout(() => finish(heardList()), quietMs);
+      quiet = setTimeout(() => finish(heardList()), val.quiet);
     };
     r.onerror = e => {
       lastErr = e.error || '';
@@ -382,19 +389,23 @@
   }
 
   // ---------- 設定 ----------
-  function showQuiet() {
-    $('quietVal').textContent = (quietMs / 1000).toFixed(1) + ' 秒';
-    $('quietDown').disabled = quietMs <= QUIET_MIN;
-    $('quietUp').disabled = quietMs >= QUIET_MAX;
+  function showSetting(k) {
+    const t = SETTINGS[k];
+    $(k + 'Val').textContent = (t.step >= 1000 ? String(val[k] / 1000) : (val[k] / 1000).toFixed(1)) + ' 秒';
+    $(k + 'Down').disabled = val[k] <= t.min;
+    $(k + 'Up').disabled = val[k] >= t.max;
   }
-  function changeQuiet(d) {
-    quietMs = Math.min(QUIET_MAX, Math.max(QUIET_MIN, quietMs + d));
-    try { localStorage.setItem('onsei.quietMs', String(quietMs)); } catch (e) { /* この間だけ使う */ }
-    showQuiet();
+  function changeSetting(k, d) {
+    const t = SETTINGS[k];
+    val[k] = Math.min(t.max, Math.max(t.min, val[k] + d));
+    try { localStorage.setItem(t.key, String(val[k])); } catch (e) { /* この間だけ使う */ }
+    showSetting(k);
   }
-  $('quietDown').onclick = () => changeQuiet(-QUIET_STEP);
-  $('quietUp').onclick = () => changeQuiet(QUIET_STEP);
-  $('bSet').onclick = () => { showQuiet(); $('setPanel').classList.toggle('hide'); };
+  for (const k of Object.keys(SETTINGS)) {
+    $(k + 'Down').onclick = () => changeSetting(k, -SETTINGS[k].step);
+    $(k + 'Up').onclick = () => changeSetting(k, SETTINGS[k].step);
+  }
+  $('bSet').onclick = () => { Object.keys(SETTINGS).forEach(showSetting); $('setPanel').classList.toggle('hide'); };
   $('setClose').onclick = () => $('setPanel').classList.add('hide');
 
   // ---------- ボタン ----------

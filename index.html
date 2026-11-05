@@ -24,12 +24,15 @@ h1 { margin:0; color:var(--gold); font-size:24px; }
 #head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 #bSet { border:0; border-radius:10px; min-height:40px; padding:6px 14px; font:inherit; font-size:15px; color:var(--text); background:var(--btn); cursor:pointer; }
 #setPanel { background:var(--card); border-radius:12px; padding:12px 14px; margin:8px 0; }
+.setItem { padding-bottom:14px; }
 #setPanel label { display:block; font-size:16px; font-weight:700; }
-#setTip { color:var(--sub); font-size:13px; padding:4px 0 8px; }
-#setRow { display:flex; align-items:center; gap:10px; }
-#setRow .btn { flex:1; margin:0; font-size:26px; }
-#quietVal { flex:1.4; text-align:center; font-size:22px; font-weight:700; }
-#setClose { min-height:48px; font-size:16px; margin-top:10px; }
+.setTip { color:var(--sub); font-size:13px; padding:4px 0 8px; }
+.setTip b { color:var(--gold); font-weight:700; }
+.setRow { display:flex; align-items:center; gap:10px; }
+.setRow .btn { flex:1; margin:0; font-size:26px; }
+.setRow .btn:disabled { opacity:.4; }
+.setVal { flex:1.4; text-align:center; font-size:22px; font-weight:700; }
+#setClose { min-height:48px; font-size:16px; }
 #prompt { font-size:21px; font-weight:700; line-height:1.4; min-height:92px; padding:12px 0 6px; }
 #mic { border-radius:14px; padding:14px 12px; text-align:center; font-size:18px; font-weight:700; color:#fff; background:var(--off); }
 #mic.listen { background:var(--listen); }
@@ -57,12 +60,32 @@ h1 { margin:0; color:var(--gold); font-size:24px; }
 <div id="app">
   <div id="head"><h1>超！音声予定</h1><button id="bSet">設定</button></div>
   <div id="setPanel" class="hide">
-    <label>話し終わりの待ち時間</label>
-    <div id="setTip">話すのをやめてから、この時間がたつと次へ進みます。途中で切れるときは長くしてください。</div>
-    <div id="setRow">
-      <button class="btn" id="quietDown" aria-label="短くする">−</button>
-      <div id="quietVal"></div>
-      <button class="btn" id="quietUp" aria-label="長くする">＋</button>
+    <div class="setItem">
+      <label>話し終わりの待ち時間</label>
+      <div class="setTip">話すのをやめてから、次へ進むまでの時間です。途中で切れるときは長くしてください。<b>推奨 2.0 秒</b>（1.5〜3.0 秒くらい）</div>
+      <div class="setRow">
+        <button class="btn" id="quietDown" aria-label="短くする">−</button>
+        <div class="setVal" id="quietVal"></div>
+        <button class="btn" id="quietUp" aria-label="長くする">＋</button>
+      </div>
+    </div>
+    <div class="setItem">
+      <label>案内の声のあとの待ち時間</label>
+      <div class="setTip">案内の声が終わってから、マイクを開くまでの時間です。短くしすぎると、エラーが出たり聞き取れなかったりします。<b>推奨 0.4 秒</b>（0.4〜1.0 秒くらい）</div>
+      <div class="setRow">
+        <button class="btn" id="afterDown" aria-label="短くする">−</button>
+        <div class="setVal" id="afterVal"></div>
+        <button class="btn" id="afterUp" aria-label="長くする">＋</button>
+      </div>
+    </div>
+    <div class="setItem">
+      <label>黙っているときに聞き続ける時間</label>
+      <div class="setTip">何も話さないとき、聞くのをやめるまでの時間です。やめたあとは「もう一度聞く」を押します。<b>推奨 10 秒</b>（10〜20 秒くらい）</div>
+      <div class="setRow">
+        <button class="btn" id="listenDown" aria-label="短くする">−</button>
+        <div class="setVal" id="listenVal"></div>
+        <button class="btn" id="listenUp" aria-label="長くする">＋</button>
+      </div>
     </div>
     <button class="btn" id="setClose">閉じる</button>
   </div>
