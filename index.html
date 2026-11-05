@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>超！音声予定</title>
+<title>超！声でスケジュール</title>
 <meta name="description" content="声で予定を入れて、iPhone のカレンダーか Google カレンダーに登録する">
 <meta name="theme-color" content="#0F1512">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="超！音声予定">
+<meta name="apple-mobile-web-app-title" content="声でスケジュール">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
@@ -20,7 +20,8 @@ html, body { margin:0; background:var(--bg); color:var(--text);
   font-family:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo","Noto Sans JP",sans-serif; }
 #app { max-width:560px; margin:0 auto; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column;
   padding:calc(env(safe-area-inset-top) + 12px) 18px calc(env(safe-area-inset-bottom) + 14px); }
-h1 { margin:0; color:var(--gold); font-size:24px; }
+h1 { margin:0; color:#fff; font-size:18px; white-space:nowrap; }
+h1 .chou { color:var(--gold); font-size:1.35em; }
 #head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 #bSet { border:0; border-radius:10px; min-height:40px; padding:6px 14px; font:inherit; font-size:15px; color:var(--text); background:var(--btn); cursor:pointer; }
 #setPanel { background:var(--card); border-radius:12px; padding:12px 14px; margin:8px 0; }
@@ -58,7 +59,7 @@ h1 { margin:0; color:var(--gold); font-size:24px; }
 </head>
 <body>
 <div id="app">
-  <div id="head"><h1>超！音声予定</h1><button id="bSet">設定</button></div>
+  <div id="head"><h1><span class="chou">超</span>！声でスケジュール</h1><button id="bSet">設定</button></div>
   <div id="setPanel" class="hide">
     <div class="setItem">
       <label>話し終わりの待ち時間</label>
